@@ -100,3 +100,5 @@ local-temp-dev/
 
 aitextgen/
 .env
+
+temp-dev

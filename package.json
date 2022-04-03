@@ -2,5 +2,18 @@
   "name": "trading_bot",
   "version": "1.0.0",
   "main": "index.js",
-  "license": "MIT"
+  "type": "module",
+  "license": "MIT",
+  "dependencies": {
+    "bluebird": "^3.7.2",
+    "date-fns": "^2.28.0",
+    "dotenv": "^16.0.0",
+    "esm": "^3.2.25",
+    "mongoose": "^6.2.9",
+    "node-binance-api": "^0.13.1",
+    "signale": "^1.4.0",
+    "technicalindicators": "^3.1.0",
+    "tulind": "^0.8.20",
+    "uuid": "^8.3.2"
+  }
 }
