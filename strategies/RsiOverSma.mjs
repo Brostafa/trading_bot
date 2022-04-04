@@ -1,8 +1,7 @@
 import { RSI, SMA } from 'technicalindicators'
-import { PublicBinance } from './Binance.mjs'
 import { addDays } from 'date-fns'
 import Promise from 'bluebird'
-import logger from './logger.mjs'
+import { PublicBinance } from '../exchanges/Binance.mjs'
 
 const RSI_UPPER_BAND = 60
 const RSI_LOWER_BAND = 35

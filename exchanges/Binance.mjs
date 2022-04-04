@@ -16,35 +16,72 @@ import { v4 } from 'uuid'
 const randomClientOid = v4
 
 export const PAIRS = [
+  {
+    pair: 'LTCBUSD',
+    tickSize: 0.1
+  },
 	{
-		pair: 'BCHBUSD',
-		tickSize: 0.1
-	},
-	{
-		pair: 'SOLBUSD',
+    pair: 'SOLBUSD',
 		tickSize: 0.01
 	},
+  {
+    pair: 'XRPBUSD',
+    tickSize: 0.0001
+  },
+  {
+    pair: 'BCHBUSD',
+    tickSize: 0.1
+  },
 	{
 		pair: 'BTCBUSD',
 		tickSize: 0.01
-	},
-	{
-		pair: 'XRPBUSD',
-		tickSize: 0.0001
 	},
 	{
 		pair: 'ADABUSD',
 		tickSize: 0.001
 	},
 	{
-		pair: 'LTCBUSD',
-		tickSize: 0.1
-	},
-	{
 		pair: 'ETHBUSD',
 		tickSize: 0.01
 	},
 ]
+
+
+/**
+ * Transform symbol to pair
+ * 
+ * @example
+ * symbolToPair('BTCUSDT')
+ * // BTC/USDT
+ * 
+ * @param {String} symbol BTCUSDT baseQuote
+ * @returns {String} pair BTC/USDT base/quote
+ */
+const symbolToPair = symbol => {
+  // Keep USD at the end of the array so we check for USDT first
+  const popularQuotes = ['EUR', 'AUD', 'USDT', 'BUSD', 'USDC',  'BNB', 'BTC', 'ETH', 'SOL', 'SHIB', 'BIDR', 'USD']
+
+  for (const quote of popularQuotes) {
+    const quoteIndex = symbol.search(quote)
+    const [base, ...rest] = symbol.split(quote)
+    const restOfSymbol = quote + rest
+
+    // quote is the base
+    if (quoteIndex === 0) {
+      return `${restOfSymbol}/${base}`
+    } else if (quoteIndex > 0) {
+      return `${base}/${restOfSymbol}`
+    }
+  }
+
+  const quote = symbol.slice(-3)
+  const coin = symbol.replace(quote, '')
+  const pair = (coin + '/' + quote).toUpperCase()
+
+  return pair
+}
+
+export const getBaseTicker = symbol => symbolToPair(symbol).split('/')[0]
 
 const getBaseIncrement = symbol => {
   // filter PAIRS using symbol
@@ -145,7 +182,7 @@ const normalizeResponse = (type, response) => {
   }
 }
 
-const round = price => price ? Math.round(Number(price) * 100) / 100 : price
+export const round = price => price ? Math.round(Number(price) * 100) / 100 : price
 
 
 export class Binance {
@@ -311,16 +348,19 @@ export class Binance {
 
     let total, cashAmount, price
     let { orderPrice } = order
+    let tradeFees = 0
 
     if (trades.length) {
       const orderAmount = Number(order.orderAmount) || this.getAmountFromTrades(trades)
+      tradeFees = trades.map(trade => Number(trade.feeAmount)).reduce((total, fee) => total + fee, 0)
       
       price = this.getWeightedPrice(trades)
       orderPrice = orderPrice || Number(trades[0].price)
       cashAmount = Number(price) * orderAmount
       total = order.side === 'buy'
-        ? round(cashAmount + fee)
-        : round(cashAmount - fee)
+        ? round(cashAmount + (fee || tradeFees))
+        : round(cashAmount - (fee || tradeFees))
+  
     }
 
     if (!order.filledAt && order.status === 'filled') {
@@ -329,16 +369,16 @@ export class Binance {
 
     return {
       ...order,
-      fee: roundFee,
+      fee: roundFee || round(tradeFees),
       trades,
       total,
       cashAmount,
-      price,
+      executedPrice: price,
       orderPrice
     }
   }
   
-  async getOrder (orderId, symbol) {
+  async getOrder ({ orderId, symbol }) {
     const orderRes = await this.client.orderStatus(symbol, null, null, { orderId })
 
     if (!orderRes) return null
@@ -354,7 +394,7 @@ export class Binance {
       orderRes = await this.client.order(side, symbol, amount, price, flags)
 
       if (flags?.type === 'STOP_LOSS_LIMIT') {
-        return await this.getOrder(orderRes.orderId, symbol)
+        return await this.getOrder({ orderId: orderRes.orderId, symbol })
       }
     } catch (e) {
       const message = JSON.parse(e.body || '{}').msg || e.message
@@ -417,8 +457,8 @@ export class Binance {
     return this._order(orderOpts)
   }
 
-  async cancelOrder (orderId, symbol) {
-    const orderRes = await this.client.cancel(symbol, orderId)
+  async cancelOrder ({ orderId, symbol, clientOrderId }) {
+    const orderRes = await this.client.cancel(symbol, orderId, clientOrderId)
 
     return normalizeResponse('order', orderRes)
   }
