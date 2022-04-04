@@ -39,6 +39,13 @@ const Candle = new mongoose.Schema({
 	_id: false
 })
 
+const TradePlan = new mongoose.Schema({
+	entryPrice: Number,
+	takeProfit: Number,
+	stopLoss: Number,
+	possibleProfit: Number,
+	currentCandle: Candle
+})
 
 // create mongoose schema
 const CampaignSchema = new mongoose.Schema({
@@ -52,13 +59,7 @@ const CampaignSchema = new mongoose.Schema({
 		required: true
 	},
 	activeOrder: ActiveOrder,
-	tradePlan: {
-		entryPrice: Number,
-		takeProfit: Number,
-		stopLoss: Number,
-		possibleProfit: Number,
-		currentCandle: Candle
-	},
+	tradePlan: TradePlan,
 	strategyName: {
 		type: String,
 		enum: ['RSI_OVER_SMA'],

@@ -91,7 +91,7 @@ const getBaseIncrement = symbol => {
 }
 
 // https://stackoverflow.com/a/11818658
-const toPercision = (num, fixed) => {
+export const toPercision = (num, fixed) => {
   const re = new RegExp('^-?\\d+(?:\.\\d{0,' + (fixed || -1) + '})?')
   
   return Number(num.toString().match(re)[0])

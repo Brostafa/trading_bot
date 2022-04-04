@@ -6,11 +6,11 @@ import { subDays, startOfDay, addDays } from 'date-fns'
 import Strategy from './strategies/RsiOverSma.mjs'
 import logger from './logger.mjs'
 import { Events, Campaigns } from './models/index.mjs'
-import { handleSell, handleBuy, handleCancel } from './trader.mjs'
+import { handleSell, handleBuy, handleCancel, watchOrderTillFill, handleStopLoss } from './trader.mjs'
 
 const ACTIVE_CAMPAIGNS = []
 
-const getStrategy = async () => {
+const getStrategy = async strategyName => {
 	const today = startOfDay(new Date())
 	const todayPlusOne = addDays(today, 1)
 	const yesterday = subDays(today, 1)
@@ -31,24 +31,87 @@ const getStrategy = async () => {
 	}
 }
 
+/**
+ * This function will be called when the bot is started
+ * to handle if bot stopped mid-trade
+ * 
+ * @param {Object} strategy strategy
+ * @param {Object} campaign campaign
+ */
 const prepStrategy = (strategy, campaign) => {
-	const { activeOrder } = campaign
+	const { activeOrder, tradePlan } = campaign
 	
 	if (activeOrder) {
 		const { side, status } = activeOrder
+		const filledBuy = (status === 'filled' && side === 'buy')
 
 		strategy.setOrderStatus(side, status)
-		// @TODO: implement take profit / stoploss watcher
+		
+		// take profit / stoploss watcher
+		if (status === 'placed' || filledBuy) {
+			if (filledBuy) {
+				logger.info(`[Prep Campaign] Creating take profit/stop loss orders for orderId="${activeOrder.orderId}"`)
+			} else {
+				logger.info(`[Prep Campaign] Initializing watcher for placed ${side} order ${side === 'sell' ? '(take profit)' : ''}`)
+			}
+
+			watchOrderTillFill({
+				strategy,
+				orderId: activeOrder.orderId,
+				campaignId: campaign._id,
+				payload: tradePlan
+			})
+		}
+
+		if (status === 'placed' && side === 'sell') {
+			if (tradePlan?.stopLoss) {
+				logger.info('[Prep Campaign] Initializing watcher for sell order (stop loss)')
+	
+				handleStopLoss({
+					strategy,
+					campaignId: campaign._id,
+					stopLoss: tradePlan?.stopLoss
+				})
+			} else {
+				logger.warn(`[Prep Campaign] No stop loss set for campaignId="${campaign._id}"`)
+			}
+		}
+	}
+
+	if (tradePlan) {
+		strategy.tradePlan = tradePlan
 	}
 }
 
-const handleCampaign = async campaign => {
+const handleCampaignEnd = async campaignId => {
+	const {
+		initialBalance,
+		balance,
+		coinAmount,
+		coinSymbol,
+		profitLoss,
+		profitLossPerc
+	} = await Campaigns.findById(campaignId)
+
+	logger.success(`[Campaign] ended initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount} ${coinSymbol}"`)
+}
+
+
+const handleCampaign = async campaignId => {
 	try {
-		const strategy = await getStrategy(campaign.strategy)
+		const campaign = await Campaigns.findById(campaignId)
+		const {
+			name,
+			balance,
+			profitLoss,
+			profitLossPerc,
+			strategyName
+		} = campaign
+		logger.info(`[Campaign] starting name="${name}" balance="${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" strategyName="${strategyName}"`)
+
+		const strategy = await getStrategy(campaign.strategyName)
 
 		prepStrategy(strategy, campaign)
-
-		const { _id: campaignId } = campaign
 
 		if (!strategy) {
 			throw new Error('[Bot] No strategy found')
@@ -62,9 +125,9 @@ const handleCampaign = async campaign => {
 			let clientOrderId = null
 			
 			if (action === 'wait_for_cross_over') {
-				const { openDate, close } = payload.currentCandle
+				const { closeDate, close } = payload.currentCandle
 				
-				logger.info(`[Bot] action="${action}" close="${close}" openDate="${openDate.toJSON()}"`)
+				logger.info(`[Bot] action="${action}" close="${close}" closeDate="${closeDate.toJSON()}"`)
 			} else {
 				logger.info(`[Bot] action="${action}" payload="${payload ? JSON.stringify(payload) : ''}"`)
 			}
@@ -73,7 +136,7 @@ const handleCampaign = async campaign => {
 				const order = await handleBuy({ payload, strategy, campaignId })
 
 				clientOrderId = order?.clientOrderId
-			} else if (action === '	cancel_buy') {
+			} else if (action === 'cancel_buy') {
 				const order = await handleCancel({ strategy, campaignId })
 				
 				clientOrderId = order?.clientOrderId
@@ -95,13 +158,15 @@ const handleCampaign = async campaign => {
 
 			await strategy.waitNextCandle()
 		}
-
+	
 		logger.info(`[Bot] strategy done reason="${strategy.reason}"`)
+
+		await handleCampaignEnd(campaignId)
 	} catch (e) {
 		logger.error(e)
 	}
 
-	setTimeout(() => handleCampaign(campaign), 1000)
+	setTimeout(() => handleCampaign(campaignId), 1000)
 }
 
 
@@ -115,7 +180,7 @@ const watchCampaigns = async () => {
 		})
 	
 		for (let campaign of campaigns) {
-			handleCampaign(campaign)
+			handleCampaign(campaign._id)
 
 			ACTIVE_CAMPAIGNS.push(campaign._id)
 		}

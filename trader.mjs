@@ -8,7 +8,7 @@ const binance = new Binance({
 	apiSecret: process.env.BINANCE_SECRET_KEY
 })
 
-const handleStopLoss = ({ strategy, stopLoss, campaignId }) => {
+export const handleStopLoss = ({ strategy, stopLoss, campaignId }) => {
 	const symbol = strategy.pair
 
 	logger.info(`[Stop Loss] setup symbol="${symbol}" stopLoss="${stopLoss}"`)
@@ -66,8 +66,8 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 	}
 }
 
-const watchOrderTillFill = async ({ strategy, orderId, campaignId, payload = {} }, retry = 1) => {
-	const maxRetries = 5
+export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payload = {} }, retry = 1) => {
+	const maxRetries = 10
 	const args = { strategy, orderId, campaignId, payload }
 	const rerun = () => watchOrderTillFill(args)
 	

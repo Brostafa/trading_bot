@@ -1,7 +1,7 @@
 import { RSI, SMA } from 'technicalindicators'
 import { addDays } from 'date-fns'
 import Promise from 'bluebird'
-import { PublicBinance } from '../exchanges/Binance.mjs'
+import { PublicBinance, toPercision, round } from '../exchanges/Binance.mjs'
 
 const RSI_UPPER_BAND = 60
 const RSI_LOWER_BAND = 35
@@ -36,7 +36,7 @@ export default class Strategy {
 		this.reason = null
 		this.candles = []
 		this.nextAction = 'wait_for_cross_over'
-		this.tradeOrder = {
+		this.tradePlan = {
 			entryPrice: null,
 			takeProfit: null,
 			stopLoss: null,
@@ -202,13 +202,14 @@ export default class Strategy {
 			
 			if (rsiInRange && rsiCrossedOver) {
 				const { high, close } = currentCandle
-				const possibleProfit = (this.resistance - 2 * this.tickSize - high) / close * 100
+				const possibleProfit = round((this.resistance - 2 * this.tickSize - high) / close * 100)
 
 				if (possibleProfit > MINIMUM_PROFIT) {
-					const takeProfit = this.resistance - this.tickSize
-					const entryPrice = high + this.tickSize
+					const tickPercision = String(this.tickSize).split('.')[1].length
+					const takeProfit = toPercision(this.resistance - this.tickSize, tickPercision)
+					const entryPrice = toPercision(high + this.tickSize, tickPercision)
 					const risk = entryPrice - ((takeProfit - entryPrice) * RISK_REWARD)
-					const stopLoss = Math.max(this.support - this.tickSize, risk)
+					const stopLoss = toPercision(Math.max(this.support - this.tickSize, risk), tickPercision)
 					const payload = {
 						currentCandle,
 						entryPrice,
@@ -218,7 +219,7 @@ export default class Strategy {
 					}
 
 					this.nextAction = 'wait_for_entry'
-					this.tradeOrder = {
+					this.tradePlan = {
 						...payload
 					}
 					
@@ -230,7 +231,7 @@ export default class Strategy {
 			}
 		} else if (this.nextAction === 'wait_for_entry') {
 			const { low, high } = currentCandle
-			const { stopLoss, takeProfit } = this.tradeOrder
+			const { stopLoss, takeProfit } = this.tradePlan
 			const stopLossReached = low <= stopLoss
 			const takeProfitReached = high >= takeProfit
 
@@ -242,7 +243,9 @@ export default class Strategy {
 					payload: {
 						currentCandle,
 						stopLossReached,
-						takeProfitReached
+						takeProfitReached,
+						stopLoss,
+						takeProfit,
 					}
 				}
 			}
