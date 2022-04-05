@@ -75,7 +75,7 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 		const order = await binance.getOrder({
 			symbol: strategy.pair,
 			orderId
-		})	
+		})
 	
 		if (order.status === 'filled' || order.status === 'cancelled') {
 			await handleOrderUpdate({
@@ -113,16 +113,18 @@ const createTrade = async ({ campaignId, order }) => {
 		const pastTrades = await Trades.find({ campaignId }, { profitLoss: 1 })
 		let expectancy, expectancyValue, winRate
 
+		console.log('pastTrades', pastTrades)
+		
 		// calculate expectancy
 		if (pastTrades.length) {
 			const pastWinningTrades = pastTrades.filter(trade => trade.profitLoss >= 0)
 			const pastLosingTrades = pastTrades.filter(trade => trade.profitLoss < 0)
-			winRate = pastWinningTrades.length / pastTrades.length
+			winRate = pastWinningTrades.length / pastTrades.length || 0
 
 			const avgWin = pastWinningTrades.reduce((acc, trade) => acc + trade.profitLoss, 0) / pastWinningTrades.length
 			const avgLoss = pastLosingTrades.reduce((acc, trade) => acc + trade.profitLoss, 0) / pastLosingTrades.length
 			expectancyValue = (winRate * avgWin) - ((1 - winRate) * avgLoss)
-			expectancyValue = round(expectancyValue)
+			expectancyValue = round(expectancyValue) || 0
 			expectancy = {
 				value: expectancyValue,
 				profitLosses: pastTrades.map(trade => trade.profitLoss),
@@ -139,7 +141,7 @@ const createTrade = async ({ campaignId, order }) => {
 			profitLoss,
 			fees,
 			expectancy,
-			winRate: round(winRate * 100) || 0
+			winRate: round(winRate * 100)
 		})
 	} catch (e) {
 		logger.error(`[Create Trade] error="${e.message || e.body || e}" stack="${e.stack}"`)
@@ -338,15 +340,25 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 
 	if (status === 'placed') {
 		logger.info(`[Cancel Order] orderId="${orderId}" symbol="${symbol}"`)
-		const order = await binance.cancelOrder({
-			symbol,
-			orderId,
-			clientOrderId
-		})
 
-		await handleOrderUpdate({ strategy, campaignId, order })
+		const binanceOrder = await binance.getOrder({
+			symbol: strategy.pair,
+			orderId
+		})
+		
+		if (binanceOrder.status === 'placed') {
+			const order = await binance.cancelOrder({
+				symbol,
+				orderId,
+				clientOrderId
+			})
+
+			await handleOrderUpdate({ strategy, campaignId, order })
 	
-		return order
+			return order
+		} else {
+			return binanceOrder
+		}
 	} else {
 		logger.warn(`[Cancel Order] couldn't cancel an active order - activeOrder="${activeOrder}"`)
 

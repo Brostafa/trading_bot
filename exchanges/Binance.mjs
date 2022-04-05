@@ -6,6 +6,10 @@
  * 
  * - BTC/USD
  *   Base/Quote
+ * 
+ * For 9xx errors (e.g: LOT_SIZE, PRICE_FILTER)
+ * https://binance-docs.github.io/apidocs/spot/en/#9xxx-filter-failures
+ * 
  */
 // const Client = require('node-binance-api')
 import Client from 'node-binance-api'
@@ -518,3 +522,8 @@ publicClient.openWebsocket((pairObjs) => {
     binanceEmitter.emit(symbol, { time, price, symbol })
   }
 })
+
+
+// @TODO: use Binance LOT_SIZE FILTER from exchangeInfo
+// publicClient.client.exchangeInfo().then(c => console.log(c.symbols.filter(b => b.symbol === 'LTCBUSD')[0]))
+// console.log(publicClient.client.roundStep(1.000001, '0.000000001'))

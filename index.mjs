@@ -41,7 +41,17 @@ const getStrategy = async strategyName => {
 const prepStrategy = (strategy, campaign) => {
 	const { activeOrder, tradePlan } = campaign
 	
+	if (tradePlan) {
+		strategy.tradePlan = tradePlan
+	}
+
 	if (activeOrder) {
+		if (strategy.pair !== activeOrder.symbol) {
+			logger.error(`[Prep Campaign] Strategy symbol does not match campaign symbol activeOrder.symbol="${activeOrder.symbol}" strategy.pair="${strategy.pair}"`)
+	
+			throw new Error('[Prep Campaign] Strategy symbol does not match campaign symbol')
+		}
+		
 		const { side, status } = activeOrder
 		const filledBuy = (status === 'filled' && side === 'buy')
 
@@ -50,7 +60,7 @@ const prepStrategy = (strategy, campaign) => {
 		// take profit / stoploss watcher
 		if (status === 'placed' || filledBuy) {
 			if (filledBuy) {
-				logger.info(`[Prep Campaign] Creating take profit/stop loss orders for orderId="${activeOrder.orderId}"`)
+				logger.info(`[Prep Campaign] Will create take profit/stop loss orders for orderId="${activeOrder.orderId}" once it gets filled`)
 			} else {
 				logger.info(`[Prep Campaign] Initializing watcher for placed ${side} order ${side === 'sell' ? '(take profit)' : ''}`)
 			}
@@ -77,10 +87,6 @@ const prepStrategy = (strategy, campaign) => {
 			}
 		}
 	}
-
-	if (tradePlan) {
-		strategy.tradePlan = tradePlan
-	}
 }
 
 const handleCampaignEnd = async campaignId => {
@@ -93,7 +99,7 @@ const handleCampaignEnd = async campaignId => {
 		profitLossPerc
 	} = await Campaigns.findById(campaignId)
 
-	logger.success(`[Campaign] ended initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount} ${coinSymbol}"`)
+	logger.success(`[Campaign] ended initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount}${coinSymbol ? ' ' + coinSymbol : ''}"`)
 }
 
 

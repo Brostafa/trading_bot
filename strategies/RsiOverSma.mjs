@@ -167,17 +167,39 @@ export default class Strategy {
 		if (currentCandle && currentCandle.openTime < plusOneDay.getTime()) {
 			return {
 				action: 'wait_for_trade_time',
+				payload: {
+					currentCandle,
+				}
 			}
 		}
 
 		if (currentCandle && currentCandle.openTime > this.endTime) {
 			this.done = true
 			this.reason = 'End time reached'
+			const { nextAction } = this
+			const actionMap = {
+				'wait_for_entry': 'cancel_buy',
+				'wait_for_sell_order': 'sell',
+				'wait_for_exit': 'sell'
+			}
+
+			let action = actionMap[nextAction]
+
+			if (action) {
+				return {
+					action: 'sell',
+					payload: {
+						currentCandle,
+						reason: 'end_of_day'
+					}
+				}
+			}
 
 			return {
-				action: 'sell',
+				action: 'end',
 				payload: {
-					currentCandle
+					currentCandle,
+					reason: 'end_of_day'
 				}
 			}
 		}
@@ -193,21 +215,27 @@ export default class Strategy {
 				values: rsi
 			})
 
+			// RSI crossover settings
 			const currentRsi = rsi[rsi.length - 1]
 			const prevRsi = rsi[rsi.length - 2]
 			const currentSma = rsiSma[rsiSma.length - 1]
 			const prevSma = rsiSma[rsiSma.length - 2]
 			const rsiInRange = currentRsi > RSI_LOWER_BAND && currentRsi < RSI_UPPER_BAND
 			const rsiCrossedOver = currentRsi - currentSma > CROSS_OVER_THRESHOLD && prevRsi - prevSma < CROSS_OVER_THRESHOLD
+
+			// Can enter the market
+			const { high, close } = currentCandle
+			const tickPercision = String(this.tickSize).split('.')[1].length
+			const entryPrice = toPercision(high + this.tickSize, tickPercision)
+			const entryHigherThanSupport = entryPrice > this.support + this.tickSize
+			const entryLowerThanResistance = entryPrice < this.resistance - this.tickSize
+			const validEntry = rsiInRange && rsiCrossedOver && entryHigherThanSupport && entryLowerThanResistance
 			
-			if (rsiInRange && rsiCrossedOver) {
-				const { high, close } = currentCandle
+			if (validEntry) {
 				const possibleProfit = round((this.resistance - 2 * this.tickSize - high) / close * 100)
 
 				if (possibleProfit > MINIMUM_PROFIT) {
-					const tickPercision = String(this.tickSize).split('.')[1].length
 					const takeProfit = toPercision(this.resistance - this.tickSize, tickPercision)
-					const entryPrice = toPercision(high + this.tickSize, tickPercision)
 					const risk = entryPrice - ((takeProfit - entryPrice) * RISK_REWARD)
 					const stopLoss = toPercision(Math.max(this.support - this.tickSize, risk), tickPercision)
 					const payload = {
@@ -215,7 +243,8 @@ export default class Strategy {
 						entryPrice,
 						takeProfit,
 						stopLoss,
-						possibleProfit
+						possibleProfit,
+						reason: 'rsi_crossed_over',
 					}
 
 					this.nextAction = 'wait_for_entry'
@@ -246,6 +275,7 @@ export default class Strategy {
 						takeProfitReached,
 						stopLoss,
 						takeProfit,
+						reason: stopLossReached ? 'stop_loss_reached' : 'take_profit_reached',
 					}
 				}
 			}
