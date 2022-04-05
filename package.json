@@ -15,6 +15,7 @@
     "mongoose": "^6.2.9",
     "node-binance-api": "^0.13.1",
     "patch-package": "^6.4.7",
+    "postinstall-postinstall": "^2.1.0",
     "signale": "^1.4.0",
     "technicalindicators": "^3.1.0",
     "uuid": "^8.3.2"
