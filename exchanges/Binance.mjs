@@ -14,42 +14,100 @@
 // const Client = require('node-binance-api')
 import Client from 'node-binance-api'
 import EventEmitter from 'events'
+import logger from '../logger.mjs'
 
 import { v4 } from 'uuid'
 
 const randomClientOid = v4
 
-export const PAIRS = [
-  {
-    pair: 'LTCBUSD',
-    tickSize: 0.1
-  },
-	{
-    pair: 'SOLBUSD',
-		tickSize: 0.01
-	},
-  {
-    pair: 'XRPBUSD',
-    tickSize: 0.0001
-  },
-  {
-    pair: 'BCHBUSD',
-    tickSize: 0.1
-  },
-	{
-		pair: 'BTCBUSD',
-		tickSize: 0.01
-	},
-	{
-		pair: 'ADABUSD',
-		tickSize: 0.001
-	},
-	{
-		pair: 'ETHBUSD',
-		tickSize: 0.01
-	},
-]
+const getBinancePairs = async () => {
+  const client = new Client().options({
+    APIKEY: '',
+    APISECRET: ''
+  })
 
+  const { symbols } = await client.exchangeInfo()
+
+  // reduce symbols using symbol prop as key
+  const pairs = symbols.reduce((collection, symbol) => {
+    const { symbol: pair, filters } = symbol
+    const priceFilter = filters.filter(f => f.filterType === 'PRICE_FILTER')[0].tickSize
+    const lotSize = filters.filter(f => f.filterType === 'LOT_SIZE')[0].stepSize
+    
+    collection[pair] = {
+      pair,
+      priceFilter,
+      lotSize
+    }
+
+    return collection
+  }, {})
+
+  return pairs
+}
+
+const _symbolFilters = () => {
+  let pairs = {}
+  
+  getBinancePairs()
+  .then(res => {
+    pairs = res
+    logger.info(`[Binance] Loaded symbols ${Object.keys(pairs).length} pairs`)
+  }).catch(e => {
+    logger.error(`[Binance] Error getting symbol filters ${e}`)
+    process.exit(0)
+  })
+
+  return symbol => pairs[symbol]
+}
+
+const symbolFilters = _symbolFilters()
+
+
+/**
+ * Get ticksize for a symbol
+ * 
+ * @example
+ * getTickSize('XRPBUSD')
+ * 0.0001
+ * 
+ * @param {String} symbol symbol (e.g: LTCBUSD)
+ * @returns {Number} tickSize (e.g: 0.01)
+ */
+export const getTickSize = symbol => {
+  const { priceFilter } = symbolFilters(symbol)
+  
+  return parseFloat(priceFilter)
+}
+
+const percision = (price, step) => {
+  const percision = String(parseFloat(step)).split('.')[1].length
+  
+  return Math.floor(price * Math.pow(10, percision)) / Math.pow(10, percision)
+}
+
+/**
+ * Floor price to tickSize
+ * 
+ * @example
+ * pricePercision('LTCBUSD', 120.276)
+ * 120.2
+ * 
+ * @param {String} symbol BTCUSDT
+ * @param {Number} price 
+ * @returns {Number} price rounded to tickSize
+ */
+export const pricePercision = (symbol, price) => {
+  const { priceFilter } = symbolFilters(symbol)
+
+  return percision(price, priceFilter)
+}
+
+export const quotePercision = (symbol, price) => {
+  const { lotSize } = symbolFilters(symbol)
+
+  return percision(price, lotSize)
+}
 
 /**
  * Transform symbol to pair
@@ -86,20 +144,6 @@ const symbolToPair = symbol => {
 }
 
 export const getBaseTicker = symbol => symbolToPair(symbol).split('/')[0]
-
-const getBaseIncrement = symbol => {
-  // filter PAIRS using symbol
-  const pair = PAIRS.filter(p => p.pair === symbol)[0]
-
-  return pair ? String(pair.tickSize).split('.')[1].length : 1
-}
-
-// https://stackoverflow.com/a/11818658
-export const toPercision = (num, fixed) => {
-  const re = new RegExp('^-?\\d+(?:\.\\d{0,' + (fixed || -1) + '})?')
-  
-  return Number(num.toString().match(re)[0])
-}
 
 const normalizeResponse = (type, response) => {
   const r = response
@@ -412,7 +456,7 @@ export class Binance {
   async buyStopLimitOrder ({ symbol, balance, limitPrice }) {
     const balanceWithFee = balance * 0.999 // 0.1% for fees
     let amount = balanceWithFee / limitPrice
-    amount = toPercision(amount, getBaseIncrement(symbol))
+    amount = quotePercision(symbol, amount)
     
     const orderOpts = {
       side: 'buy',
@@ -522,8 +566,3 @@ publicClient.openWebsocket((pairObjs) => {
     binanceEmitter.emit(symbol, { time, price, symbol })
   }
 })
-
-
-// @TODO: use Binance LOT_SIZE FILTER from exchangeInfo
-// publicClient.client.exchangeInfo().then(c => console.log(c.symbols.filter(b => b.symbol === 'LTCBUSD')[0]))
-// console.log(publicClient.client.roundStep(1.000001, '0.000000001'))

@@ -1,24 +1,26 @@
 import { config } from 'dotenv'
 config()
 
-import { PAIRS } from './exchanges/Binance.mjs'
-import { subDays, startOfDay, addDays } from 'date-fns'
+import { subDays, startOfDay, addDays, differenceInMilliseconds, formatDistanceStrict } from 'date-fns'
 import Strategy from './strategies/RsiOverSma.mjs'
 import logger from './logger.mjs'
 import { Events, Campaigns } from './models/index.mjs'
 import { handleSell, handleBuy, handleCancel, watchOrderTillFill, handleStopLoss } from './trader.mjs'
 
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 const ACTIVE_CAMPAIGNS = []
 
-const getStrategy = async strategyName => {
+const getStrategy = async (strategy, quoteCurrency) => {
+	const { name, baseSymbols } = strategy
 	const today = startOfDay(new Date())
 	const todayPlusOne = addDays(today, 1)
 	const yesterday = subDays(today, 1)
 
-	for (let { pair, tickSize } of PAIRS) {
+	for (let symbol of baseSymbols) {
 		const strategy = new Strategy({
-			pair,
-			tickSize,
+			// symbol = BTC, quoteCurreny = BUSD
+			pair: symbol + quoteCurrency,
 			startTime: yesterday.getTime(),
 			endTime: todayPlusOne.getTime(),
 		})
@@ -29,6 +31,10 @@ const getStrategy = async strategyName => {
 			return strategy
 		}
 	}
+
+	throw new Error('[Bot] No strategy found', {
+		cause: 'no_strategy_found'
+	})
 }
 
 /**
@@ -104,24 +110,22 @@ const handleCampaignEnd = async campaignId => {
 
 
 const handleCampaign = async campaignId => {
-	try {
-		const campaign = await Campaigns.findById(campaignId)
-		const {
-			name,
-			balance,
-			profitLoss,
-			profitLossPerc,
-			strategyName
-		} = campaign
-		logger.info(`[Campaign] starting name="${name}" balance="${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" strategyName="${strategyName}"`)
+	const campaign = await Campaigns.findById(campaignId)
+	const {
+		name,
+		balance,
+		profitLoss,
+		profitLossPerc,
+		strategy: campStrat,
+		quoteCurrency
+	} = campaign
 
-		const strategy = await getStrategy(campaign.strategyName)
+	try {
+		logger.info(`[Campaign] starting name="${name}" balance="${balance}" profitLoss="$${profitLoss || 0} (${profitLossPerc || 0}%)" strategyName="${campStrat.name}"`)
+
+		const strategy = await getStrategy(campStrat, quoteCurrency)
 
 		prepStrategy(strategy, campaign)
-
-		if (!strategy) {
-			throw new Error('[Bot] No strategy found')
-		}
 			
 		logger.info(`[Bot] Strategy found for pair="${strategy.pair}"`)
 
@@ -170,6 +174,16 @@ const handleCampaign = async campaignId => {
 		await handleCampaignEnd(campaignId)
 	} catch (e) {
 		logger.error(e)
+		
+		if (e.cause === 'no_strategy_found') {
+			const tomorrow = addDays(startOfDay(new Date()), 1)
+			const msTillTomorrow = differenceInMilliseconds(tomorrow, new Date())
+			const humanizedMs = formatDistanceStrict(new Date(), Date.now() + msTillTomorrow, { includeSeconds: true })
+
+			logger.info(`[Bot] No strategy found for campaignId="${campaignId}" name="${name}" will try again in ${humanizedMs}`)
+			
+			await delay(msTillTomorrow)
+		}
 	}
 
 	setTimeout(() => handleCampaign(campaignId), 1000)
@@ -197,4 +211,4 @@ const watchCampaigns = async () => {
 	setTimeout(watchCampaigns, 1000)
 }
 
-watchCampaigns()
+setTimeout(watchCampaigns, 5000)

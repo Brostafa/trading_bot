@@ -60,12 +60,15 @@ const CampaignSchema = new mongoose.Schema({
 	},
 	activeOrder: ActiveOrder,
 	tradePlan: TradePlan,
-	strategyName: {
-		type: String,
-		enum: ['RSI_OVER_SMA'],
-		default: 'RSI_OVER_SMA'
+	strategy: {
+		name: {
+			type: String,
+			enum: ['RSI_OVER_SMA'],
+			default: 'RSI_OVER_SMA'	
+		},
+		baseSymbols: [String],
 	},
-	baseCurrency: {
+	quoteCurrency: {
 		type: String,
 		enum: ['USDT', 'BUSD', 'USDC'],
 		default: 'BUSD'

@@ -1,7 +1,7 @@
 import { RSI, SMA } from 'technicalindicators'
 import { addDays } from 'date-fns'
-import Promise from 'bluebird'
-import { PublicBinance, toPercision, round } from '../exchanges/Binance.mjs'
+import { PublicBinance, getTickSize, pricePercision, quotePercision, round } from '../exchanges/Binance.mjs'
+
 
 const RSI_UPPER_BAND = 60
 const RSI_LOWER_BAND = 35
@@ -12,20 +12,21 @@ const MINIMUM_PROFIT = 0.5 // 0.5%
 const RISK_REWARD = 1 / 1.1 // 1.1x
 const MINIMUM_BULLISH_CHANGE = 2 // 2%
 
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
+
 export default class Strategy {
 	constructor ({
 		pair,
 		startTime,
 		endTime,
 		manualSetCandles = false,
-		tickSize = 0.01,
 	 }) {
 		this.pair = pair
 		this.startTime = startTime
 		this.endTime = endTime
 		this.manualSetCandles = manualSetCandles
 		this.binance = new PublicBinance()
-		this.tickSize = tickSize
+		this.tickSize = getTickSize(pair)
 
 		this.bullishCandle = null
 		// bullish candle low
@@ -127,7 +128,7 @@ export default class Strategy {
 		const secondsLeft = 60 - new Date().getSeconds()
 		const msLeft = (minutesLeft * 60 * 1000 + secondsLeft * 1000) + 500
 		
-		return Promise.delay(msLeft)
+		return delay(msLeft)
 	}
 
 	getLastItem (array) {
@@ -225,8 +226,9 @@ export default class Strategy {
 
 			// Can enter the market
 			const { high, close } = currentCandle
-			const tickPercision = String(this.tickSize).split('.')[1].length
-			const entryPrice = toPercision(high + this.tickSize, tickPercision)
+			
+			let entryPrice = high + this.tickSize
+			entryPrice = pricePercision(this.pair, entryPrice)
 			const entryHigherThanSupport = entryPrice > this.support + this.tickSize
 			const entryLowerThanResistance = entryPrice < this.resistance - this.tickSize
 			const validEntry = rsiInRange && rsiCrossedOver && entryHigherThanSupport && entryLowerThanResistance
@@ -235,9 +237,11 @@ export default class Strategy {
 				const possibleProfit = round((this.resistance - 2 * this.tickSize - high) / close * 100)
 
 				if (possibleProfit > MINIMUM_PROFIT) {
-					const takeProfit = toPercision(this.resistance - this.tickSize, tickPercision)
+					let takeProfit = this.resistance - this.tickSize
+					takeProfit = pricePercision(this.pair, takeProfit)
 					const risk = entryPrice - ((takeProfit - entryPrice) * RISK_REWARD)
-					const stopLoss = toPercision(Math.max(this.support - this.tickSize, risk), tickPercision)
+					let stopLoss = Math.max(this.support - this.tickSize, risk)
+					stopLoss = pricePercision(this.pair, stopLoss)
 					const payload = {
 						currentCandle,
 						entryPrice,
