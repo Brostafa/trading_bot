@@ -111,7 +111,9 @@ const createTrade = async ({ campaignId, order }) => {
 		const profitLoss = round(sellOrder.total - buyOrder.total)
 		const fees = round(sellOrder.fee + buyOrder.fee)
 		const pastTrades = await Trades.find({ campaignId }, { profitLoss: 1 })
-		let expectancy, expectancyValue, winRate
+		let expectancy = null
+		let expectancyValue = 0
+		let winRate = 0
 
 		console.log('pastTrades', pastTrades)
 		
@@ -119,7 +121,7 @@ const createTrade = async ({ campaignId, order }) => {
 		if (pastTrades.length) {
 			const pastWinningTrades = pastTrades.filter(trade => trade.profitLoss >= 0)
 			const pastLosingTrades = pastTrades.filter(trade => trade.profitLoss < 0)
-			winRate = pastWinningTrades.length / pastTrades.length || 0
+			winRate = (pastWinningTrades.length / pastTrades.length) || 0
 
 			const avgWin = pastWinningTrades.reduce((acc, trade) => acc + trade.profitLoss, 0) / pastWinningTrades.length
 			const avgLoss = pastLosingTrades.reduce((acc, trade) => acc + trade.profitLoss, 0) / pastLosingTrades.length
@@ -141,7 +143,7 @@ const createTrade = async ({ campaignId, order }) => {
 			profitLoss,
 			fees,
 			expectancy,
-			winRate: round(winRate * 100) || 0
+			winRate: round(winRate * 100)
 		})
 	} catch (e) {
 		logger.error(`[Create Trade] error="${e.message || e.body || e}" stack="${e.stack}"`)
@@ -150,7 +152,7 @@ const createTrade = async ({ campaignId, order }) => {
 
 const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 	let campaignUpdate = {}
-	const { initialBalance, balance } = await Campaigns.findById(campaignId)
+	const { initialBalance, balance, name } = await Campaigns.findById(campaignId)
 
 	try {
 		const { total, executedAmount } = order
@@ -167,7 +169,8 @@ const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 			const newBalance = balance + total
 			const profitLoss = round(newBalance - initialBalance)
 			const profitLossPerc = round(((newBalance / initialBalance) - 1) * 100)
-
+			const minBalance = 10.5
+			
 			campaignUpdate = {
 				balance: newBalance,
 				coinSymbol: null,
@@ -176,6 +179,13 @@ const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 				profitLossPerc: profitLossPerc,
 				tradePlan: null,
 				activeOrder: null
+			}
+
+			// Binance min purchase is $10 + 0.2% fees
+			if (newBalance < minBalance) {
+				campaignUpdate.status = 'inactive'
+
+				logger.warn(`[Campaign Balance] Paused camp.name="${name}" balance="${newBalance}" because it has funds lower than minBalance="${minBalance}"`)
 			}
 
 			logger.info(`[Campaign Balance] Initial Balance="${initialBalance}" Balance="${newBalance}" Profit Loss="$${profitLoss} (${profitLossPerc} %)"`)
@@ -190,18 +200,37 @@ const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 }
 
 const handleOrderUpdate = async ({ strategy, campaignId, order }) => {
-	strategy.setOrderStatus(order.side, order.status)
+	const { status, side, orderId, clientOrderId } = order
 	const baseTicker = getBaseTicker(order.symbol)
+	const orderExists = !!(await Orders.findOne({
+		status,
+		clientOrderId,
+		orderId,
+		side,
+	}, { _id: 1 }))
 
-	logger.info(`[Order Update] status="${order.status}" side="${order.side}" amount="${order.orderAmount} ${baseTicker}" price="${order.executedPrice || order.orderPrice}" reason="${order.reason || ''}" orderId="${order.orderId}"`)
+	logger.info(`[Order Update] status="${status}" side="${side}" amount="${order.orderAmount} ${baseTicker}" price="${order.executedPrice || order.orderPrice}" reason="${order.reason || ''}" orderId="${orderId}"`)
 
-	if (order.status !== 'cancelled') {
+	if (!orderExists) {
+		await Orders.create({
+			campaignId,
+			...order
+		})
+		
+		strategy.setOrderStatus(side, status)
+	} else {
+		logger.warn(`[Watch Order] order already exists orderId="${orderId}"`)
+
+		return
+	}
+
+	if (status !== 'cancelled') {
 		await Campaigns.updateOne({
 			_id: campaignId
 		}, {
 			activeOrder: order
 		})
-	} else if (order.status === 'cancelled' && order.side === 'buy') {
+	} else if (status === 'cancelled' && side === 'buy') {
 		await Campaigns.updateOne({
 			_id: campaignId
 		}, {
@@ -210,15 +239,10 @@ const handleOrderUpdate = async ({ strategy, campaignId, order }) => {
 		})
 	}
 
-	await Orders.create({
-		campaignId,
-		...order
-	})
-
-	if (order.status === 'filled') {
+	if (status === 'filled') {
 		handleCampaignFilledOrder({ order, campaignId })
 		
-		if (order.side === 'sell') {
+		if (side === 'sell') {
 			createTrade({ order, campaignId })
 		}
 	}
@@ -366,3 +390,4 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 		return activeOrder
 	}
 }
+
