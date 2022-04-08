@@ -242,12 +242,14 @@ export default class Strategy {
 					const risk = entryPrice - ((takeProfit - entryPrice) * RISK_REWARD)
 					let stopLoss = Math.max(this.support - this.tickSize, risk)
 					stopLoss = pricePercision(this.pair, stopLoss)
+					const possibleLoss = round((entryPrice - stopLoss) / close * 100)
 					const payload = {
 						currentCandle,
 						entryPrice,
 						takeProfit,
 						stopLoss,
 						possibleProfit,
+						possibleLoss,
 						reason: 'rsi_crossed_over',
 					}
 

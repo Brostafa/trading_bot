@@ -45,7 +45,7 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 			campaignId
 		})
 	} else {
-		logger.info(`[Take Profit] setup sellCoins="${executedAmount} ${baseTicker}" takeProfit="${takeProfit}" camp.name="${name}"`)
+		logger.info(`[Take Profit] setup takeProfit="${takeProfit}" camp.name="${name}" sellCoins="${executedAmount} ${baseTicker}"`)
 	
 		const order = await binance.sellLimitOrder({
 			symbol,
@@ -54,7 +54,7 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 			limitPrice: takeProfit
 		})
 		
-		logger.info(`[Take Profit] sellCoins="${executedAmount} ${baseTicker}" orderId="${order.orderId}" status="${order.status}" camp.name="${name}"`)
+		logger.info(`[Take Profit] status="${order.status}" camp.name="${name}" orderId="${order.orderId}" sellCoins="${executedAmount} ${baseTicker}"`)
 	
 		await handleOrderUpdate({ strategy, campaignId, order })
 		
@@ -141,7 +141,7 @@ const createTrade = async ({ campaignId, order }) => {
 			profitLoss,
 			fees,
 			expectancy,
-			winRate: round(winRate * 100)
+			winRate: round(winRate * 100) || 0
 		})
 	} catch (e) {
 		logger.error(`[Create Trade] error="${e.message || e.body || e}" stack="${e.stack}"`)
@@ -210,7 +210,6 @@ const handleOrderUpdate = async ({ strategy, campaignId, order }) => {
 		})
 	}
 
-
 	await Orders.create({
 		campaignId,
 		...order
@@ -226,11 +225,13 @@ const handleOrderUpdate = async ({ strategy, campaignId, order }) => {
 }
 
 export const handleBuy = async ({ payload, strategy, campaignId }) => {
-	const { currentCandle, entryPrice, takeProfit, stopLoss, possibleProfit } = payload
+	const { currentCandle, entryPrice, takeProfit, stopLoss, possibleProfit, possibleLoss } = payload
 	const campaign = await Campaigns.findById(campaignId)
-	const { balance, baseCurrency, activeOrder, name } = campaign
+	const { balance, quoteCurrency, activeOrder, name } = campaign
+	const possibleProfitInUsd = round(balance * (possibleProfit / 100))
+	const possibleLossInUsd = round(balance * (possibleLoss / 100))
 
-	logger.info(`[Buy] camp.name="${name}" currentCandle="${currentCandle.openDate.toJSON()}" entryPrice="${entryPrice}" takeProfit="${takeProfit}" stopLoss="${stopLoss}" possibleProfit="${round(possibleProfit)}%" balance="${balance} ${baseCurrency}"`)
+	logger.info(`[Buy] camp.name="${name}" currentCandle="${currentCandle.openDate.toJSON()}" entryPrice="${entryPrice}" takeProfit="${takeProfit}" stopLoss="${stopLoss}" possibleProfit="$${possibleProfitInUsd} (${possibleProfit}%)" possibleLoss="$${possibleLossInUsd} (${possibleLoss}%)" balance="${balance} ${quoteCurrency}"`)
 
 	if (activeOrder?.status === 'placed') {
 		logger.warn(`[Buy] camp.name="${name}" Failed to place an order as one is already placed - watching order instead`)

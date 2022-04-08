@@ -44,6 +44,7 @@ const TradePlan = new mongoose.Schema({
 	takeProfit: Number,
 	stopLoss: Number,
 	possibleProfit: Number,
+	possibleLoss: Number,
 	currentCandle: Candle
 })
 
