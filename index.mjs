@@ -56,7 +56,7 @@ const getStrategy = async (campStrat, quoteCurrency) => {
  * @param {Object} campaign campaign
  */
 const prepStrategy = (strategy, campaign) => {
-	const { activeOrder, tradePlan } = campaign
+	const { activeOrder, tradePlan, name } = campaign
 	
 	if (tradePlan) {
 		strategy.tradePlan = tradePlan
@@ -64,7 +64,7 @@ const prepStrategy = (strategy, campaign) => {
 
 	if (activeOrder) {
 		if (strategy.pair !== activeOrder.symbol) {
-			logger.error(`[Prep Campaign] Strategy symbol does not match campaign symbol activeOrder.symbol="${activeOrder.symbol}" strategy.pair="${strategy.pair}"`)
+			logger.error(`[Prep Campaign] camp.name="${name}" Strategy symbol does not match campaign symbol activeOrder.symbol="${activeOrder.symbol}" strategy.pair="${strategy.pair}"`)
 	
 			throw new Error('[Prep Campaign] Strategy symbol does not match campaign symbol')
 		}
@@ -77,9 +77,9 @@ const prepStrategy = (strategy, campaign) => {
 		// take profit / stoploss watcher
 		if (status === 'placed' || filledBuy) {
 			if (filledBuy) {
-				logger.info(`[Prep Campaign] Will create take profit/stop loss orders for orderId="${activeOrder.orderId}" once it gets filled`)
+				logger.info(`[Prep Campaign] camp.name="${name}" Will create take profit/stop loss orders for orderId="${activeOrder.orderId}" once it gets filled`)
 			} else {
-				logger.info(`[Prep Campaign] Initializing watcher for placed ${side} order ${side === 'sell' ? '(take profit)' : ''}`)
+				logger.info(`[Prep Campaign] camp.name="${name}" Initializing watcher for placed ${side} order ${side === 'sell' ? '(take profit)' : ''}`)
 			}
 
 			watchOrderTillFill({
@@ -92,7 +92,7 @@ const prepStrategy = (strategy, campaign) => {
 
 		if (status === 'placed' && side === 'sell') {
 			if (tradePlan?.stopLoss) {
-				logger.info('[Prep Campaign] Initializing watcher for sell order (stop loss)')
+				logger.info(`[Prep Campaign] camp.name="${name}" Initializing watcher for sell order (stop loss)`)
 	
 				handleStopLoss({
 					strategy,
@@ -100,7 +100,7 @@ const prepStrategy = (strategy, campaign) => {
 					stopLoss: tradePlan?.stopLoss
 				})
 			} else {
-				logger.warn(`[Prep Campaign] No stop loss set for campaignId="${campaign._id}"`)
+				logger.warn(`[Prep Campaign] No stop loss set for campaignId="${campaign._id}" camp.name="${name}" `)
 			}
 		}
 	}
@@ -108,6 +108,7 @@ const prepStrategy = (strategy, campaign) => {
 
 const handleCampaignEnd = async campaignId => {
 	const {
+		name,
 		initialBalance,
 		balance,
 		coinAmount,
@@ -116,7 +117,7 @@ const handleCampaignEnd = async campaignId => {
 		profitLossPerc
 	} = await Campaigns.findById(campaignId)
 
-	logger.success(`[Campaign] ended initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount}${coinSymbol ? ' ' + coinSymbol : ''}"`)
+	logger.success(`[Campaign] ended camp.name="${name}" initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount}${coinSymbol ? ' ' + coinSymbol : ''}"`)
 }
 
 
@@ -148,9 +149,9 @@ const handleCampaign = async campaignId => {
 			if (action === 'wait_for_cross_over') {
 				const { closeDate, close } = payload.currentCandle
 				
-				logger.info(`[Bot] action="${action}" close="${close}" closeDate="${closeDate.toJSON()}"`)
+				logger.info(`[Bot] action="${action}" camp.name="${name}" pair="${strategy.pair}" close="${close}" closeDate="${closeDate.toJSON()}"`)
 			} else {
-				logger.info(`[Bot] action="${action}" payload="${payload ? JSON.stringify(payload) : ''}"`)
+				logger.info(`[Bot] action="${action}" camp.name="${name}" pair="${strategy.pair}" payload="${payload ? JSON.stringify(payload) : ''}"`)
 			}
 
 			if (action === 'buy') {
@@ -180,7 +181,7 @@ const handleCampaign = async campaignId => {
 			await strategy.waitNextCandle()
 		}
 	
-		logger.info(`[Bot] strategy done reason="${strategy.reason}"`)
+		logger.info(`[Bot] camp.name="${name}" strategy done reason="${strategy.reason}"`)
 
 		await handleCampaignEnd(campaignId)
 	} catch (e) {
@@ -190,7 +191,7 @@ const handleCampaign = async campaignId => {
 			const msTillTomorrow = differenceInMilliseconds(tomorrow, new Date())
 			const humanizedMs = formatDistanceStrict(new Date(), Date.now() + msTillTomorrow, { includeSeconds: true })
 			
-			logger.warn(`[Bot] No strategy found for campaignId="${campaignId}" name="${name}" reason="${e.reason}" will try again in ${humanizedMs}`)
+			logger.warn(`[Bot] No strategy found for campaignId="${campaignId}" camp.name="${name}" reason="${e.reason}" will try again in ${humanizedMs}`)
 			
 			await delay(msTillTomorrow)
 		} else {

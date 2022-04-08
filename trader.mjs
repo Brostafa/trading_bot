@@ -30,13 +30,13 @@ export const handleStopLoss = ({ strategy, stopLoss, campaignId }) => {
 }
 
 const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaignId }) => {
-	const { activeOrder } = await Campaigns.findById(campaignId)
+	const { activeOrder, name } = await Campaigns.findById(campaignId)
 	const { executedAmount, symbol, clientOrderId } = oldOrder
 	const { status, side } = activeOrder || {}
 	const baseTicker = getBaseTicker(symbol)
 
 	if (status === 'placed' && side === 'sell') {
-		logger.warn(`[Take Profit] order was already placed -- watching order instead`)
+		logger.warn(`[Take Profit] order was already placed -- watching order instead camp.name="${name}" `)
 		const { orderId } = activeOrder
 
 		watchOrderTillFill({
@@ -45,7 +45,7 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 			campaignId
 		})
 	} else {
-		logger.info(`[Take Profit] setup sellCoins="${executedAmount} ${baseTicker}" takeProfit="${takeProfit}"`)
+		logger.info(`[Take Profit] setup sellCoins="${executedAmount} ${baseTicker}" takeProfit="${takeProfit}" camp.name="${name}"`)
 	
 		const order = await binance.sellLimitOrder({
 			symbol,
@@ -54,7 +54,7 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 			limitPrice: takeProfit
 		})
 		
-		logger.info(`[Take Profit] sellCoins="${executedAmount} ${baseTicker}" orderId="${order.orderId}" status="${order.status}"`)
+		logger.info(`[Take Profit] sellCoins="${executedAmount} ${baseTicker}" orderId="${order.orderId}" status="${order.status}" camp.name="${name}"`)
 	
 		await handleOrderUpdate({ strategy, campaignId, order })
 		
@@ -228,12 +228,12 @@ const handleOrderUpdate = async ({ strategy, campaignId, order }) => {
 export const handleBuy = async ({ payload, strategy, campaignId }) => {
 	const { currentCandle, entryPrice, takeProfit, stopLoss, possibleProfit } = payload
 	const campaign = await Campaigns.findById(campaignId)
-	const { balance, baseCurrency, activeOrder } = campaign
+	const { balance, baseCurrency, activeOrder, name } = campaign
 
-	logger.info(`[Buy] currentCandle="${currentCandle.openDate.toJSON()}" entryPrice="${entryPrice}" takeProfit="${takeProfit}" stopLoss="${stopLoss}" possibleProfit="${round(possibleProfit)}%" balance="${balance} ${baseCurrency}"`)
+	logger.info(`[Buy] camp.name="${name}" currentCandle="${currentCandle.openDate.toJSON()}" entryPrice="${entryPrice}" takeProfit="${takeProfit}" stopLoss="${stopLoss}" possibleProfit="${round(possibleProfit)}%" balance="${balance} ${baseCurrency}"`)
 
 	if (activeOrder?.status === 'placed') {
-		logger.warn(`[Buy] Failed to place an order as one is already placed - watching order instead`)
+		logger.warn(`[Buy] camp.name="${name}" Failed to place an order as one is already placed - watching order instead`)
 
 		watchOrderTillFill({
 			strategy,
@@ -275,10 +275,10 @@ export const handleSell = async ({ strategy, campaignId }, retry = 1) => {
 	const maxRetries = 5
 
 	try {
-		const { activeOrder } = await Campaigns.findOne({ _id: campaignId })
+		const { activeOrder, name } = await Campaigns.findOne({ _id: campaignId })
 		
 		if (!activeOrder) {
-			logger.warn(`[Sell] No active order found campaignId="${campaignId}"`)
+			logger.warn(`[Sell] No active order found campaignId="${campaignId}" camp.name="${name}" `)
 
 			return
 		}
@@ -295,11 +295,11 @@ export const handleSell = async ({ strategy, campaignId }, retry = 1) => {
 
 		const baseTicker = getBaseTicker(symbol)
 
-		logger.info(`[Sell] activeOrder="${orderId}" amount="${orderAmount} ${baseTicker}" `)
+		logger.info(`[Sell] activeOrder="${orderId}" amount="${orderAmount} ${baseTicker}" camp.name="${name}"`)
 		
 		// Cancel takeProfit order if it exists
 		if (side === 'sell' && status === 'placed') {
-			logger.info(`[Sell] cancelling take profit order orderId="${orderId}"`)
+			logger.info(`[Sell] cancelling take profit order orderId="${orderId}" camp.name="${name}" `)
 
 			await handleCancel({
 				strategy,
@@ -328,10 +328,10 @@ export const handleSell = async ({ strategy, campaignId }, retry = 1) => {
 }
 
 export const handleCancel = async ({ strategy, campaignId }) => {
-	const { activeOrder } = await Campaigns.findById(campaignId)
+	const { activeOrder, name } = await Campaigns.findById(campaignId)
 
 	if (!activeOrder) {
-		logger.warn(`[Cancel Order] No active order found campaignId="${campaignId}"`)
+		logger.warn(`[Cancel Order] No active order found campaignId="${campaignId}" camp.name="${name}" `)
 
 		return
 	}
@@ -339,7 +339,7 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 	const { status, orderId, clientOrderId, symbol } = activeOrder
 
 	if (status === 'placed') {
-		logger.info(`[Cancel Order] orderId="${orderId}" symbol="${symbol}"`)
+		logger.info(`[Cancel Order] orderId="${orderId}" symbol="${symbol}" camp.name="${name}" `)
 
 		const binanceOrder = await binance.getOrder({
 			symbol: strategy.pair,
@@ -360,7 +360,7 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 			return binanceOrder
 		}
 	} else {
-		logger.warn(`[Cancel Order] couldn't cancel an active order - activeOrder="${activeOrder}"`)
+		logger.warn(`[Cancel Order] couldn't cancel an active order - activeOrder="${activeOrder}" camp.name="${name}" `)
 
 		return activeOrder
 	}
