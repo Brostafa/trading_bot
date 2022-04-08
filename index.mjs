@@ -146,7 +146,7 @@ const handleCampaign = async campaignId => {
 			const actionsToSave = ['buy', 'cancel_buy', 'sell']
 			let clientOrderId = null
 			
-			if (action === 'wait_for_cross_over') {
+			if (action === 'wait_buy_signal') {
 				const { closeDate, close } = payload.currentCandle
 				
 				logger.info(`[Bot] action="${action}" camp.name="${name}" pair="${strategy.pair}" close="${close}" closeDate="${closeDate.toJSON()}"`)

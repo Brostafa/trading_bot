@@ -36,7 +36,7 @@ export default class Strategy {
 		this.done = false
 		this.reason = null
 		this.candles = []
-		this.nextAction = 'wait_for_cross_over'
+		this.nextAction = 'wait_buy_signal'
 		this.tradePlan = {
 			entryPrice: null,
 			takeProfit: null,
@@ -142,7 +142,7 @@ export default class Strategy {
 			} else if (status === 'filled') {
 				this.nextAction = 'wait_for_sell_order'
 			} else if (status === 'cancelled') {
-				this.nextAction = 'wait_for_cross_over'
+				this.nextAction = 'wait_buy_signal'
 			} else {
 				throw new Error('Invalid order status')
 			}
@@ -150,7 +150,7 @@ export default class Strategy {
 			if (status === 'placed' || status === 'cancelled') {
 				this.nextAction = 'wait_for_exit'
 			} else if (status === 'filled') {
-				this.nextAction = 'wait_for_cross_over'
+				this.nextAction = 'wait_buy_signal'
 			} else {
 				throw new Error('Invalid order status')
 			}
@@ -205,7 +205,7 @@ export default class Strategy {
 			}
 		}
 
-		if (this.nextAction === 'wait_for_cross_over') {
+		if (this.nextAction === 'wait_buy_signal') {
 			const rsi = new RSI.calculate({
 				period: RSI_PERIOD,
 				values: this.candles.map(c => c.close),
@@ -271,7 +271,7 @@ export default class Strategy {
 			const takeProfitReached = high >= takeProfit
 
 			if (stopLossReached || takeProfitReached) {
-				this.nextAction = 'wait_for_cross_over'
+				this.nextAction = 'wait_buy_signal'
 
 				return {
 					action: 'cancel_buy',
