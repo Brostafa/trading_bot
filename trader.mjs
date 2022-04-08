@@ -84,7 +84,7 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 				order
 			})
 		} else {
-			setTimeout(rerun, 1000)
+			setTimeout(rerun, 2500)
 		}
 
 		// if we fulfilled buy order then sell it for takeprofit/stoploss
@@ -98,7 +98,7 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 		logger.error(`[Watch Order] orderId="${orderId}" pair="${strategy.pair}" error="${e.message || e.body || e}" stack="${e.stack}" retry="${retry}"`)
 
 		if (retry < maxRetries) {
-			setTimeout(() => watchOrderTillFill(args, retry + 1), 1000)
+			setTimeout(() => watchOrderTillFill(args, retry + 1), 2500)
 		}
 	}
 }
