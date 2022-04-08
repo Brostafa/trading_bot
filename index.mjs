@@ -11,14 +11,24 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
 const ACTIVE_CAMPAIGNS = []
 
-const getStrategy = async (strategy, quoteCurrency) => {
-	const { name, baseSymbols } = strategy
+class StrategyError extends Error {
+	constructor (message, { reason, type }) {
+		super(message)
+
+		this.reason = reason
+		this.type = type
+	}
+}
+
+const getStrategy = async (campStrat, quoteCurrency) => {
+	const { name, baseSymbols } = campStrat
 	const today = startOfDay(new Date())
 	const todayPlusOne = addDays(today, 1)
 	const yesterday = subDays(today, 1)
+	let strategy = {}
 
 	for (let symbol of baseSymbols) {
-		const strategy = new Strategy({
+		strategy = new Strategy({
 			// symbol = BTC, quoteCurreny = BUSD
 			pair: symbol + quoteCurrency,
 			startTime: yesterday.getTime(),
@@ -32,8 +42,9 @@ const getStrategy = async (strategy, quoteCurrency) => {
 		}
 	}
 
-	throw new Error('[Bot] No strategy found', {
-		cause: 'no_strategy_found'
+	throw new StrategyError('[Bot] No strategy found', {
+		type: 'no_strategy_found',
+		reason: strategy.reason
 	})
 }
 
@@ -173,16 +184,17 @@ const handleCampaign = async campaignId => {
 
 		await handleCampaignEnd(campaignId)
 	} catch (e) {
-		logger.error(e)
 		
-		if (e.cause === 'no_strategy_found') {
+		if (e.type === 'no_strategy_found') {			
 			const tomorrow = addDays(startOfDay(new Date()), 1)
 			const msTillTomorrow = differenceInMilliseconds(tomorrow, new Date())
 			const humanizedMs = formatDistanceStrict(new Date(), Date.now() + msTillTomorrow, { includeSeconds: true })
-
-			logger.info(`[Bot] No strategy found for campaignId="${campaignId}" name="${name}" will try again in ${humanizedMs}`)
+			
+			logger.warn(`[Bot] No strategy found for campaignId="${campaignId}" name="${name}" reason="${e.reason}" will try again in ${humanizedMs}`)
 			
 			await delay(msTillTomorrow)
+		} else {
+			logger.error(e)
 		}
 	}
 

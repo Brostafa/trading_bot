@@ -102,7 +102,7 @@ export default class Strategy {
 				symbol: this.pair,
 				interval: '15m',
 				startTime: this.startTime,
-				endTime: new Date().getTime(),
+				endTime: this.endTime,
 				limit,
 			})
 	
