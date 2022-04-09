@@ -106,7 +106,7 @@ const prepStrategy = (strategy, campaign) => {
 	}
 }
 
-const sellActiveOrder = async activeOrder => {
+const sellActiveOrder = async (activeOrder, campaignId) => {
 	const { orderId, side, symbol } = activeOrder
 
 	try {
@@ -220,7 +220,6 @@ const handleCampaign = async campaignId => {
 
 		await handleCampaignEnd(campaignId)
 	} catch (e) {
-		
 		if (e.type === 'no_strategy_found') {			
 			const tomorrow = addDays(startOfDay(new Date()), 1)
 			const msTillTomorrow = differenceInMilliseconds(tomorrow, new Date())
@@ -229,7 +228,7 @@ const handleCampaign = async campaignId => {
 			logger.warn(`[Bot] No strategy found for campaignId="${campaignId}" camp.name="${name}" reason="${e.reason}" will try again in ${humanizedMs}`)
 			
 			if (activeOrder) {
-				sellActiveOrder(activeOrder)
+				sellActiveOrder(activeOrder, campaignId)
 			}
 
 			await delay(msTillTomorrow)
