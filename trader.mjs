@@ -3,6 +3,8 @@ import { binanceEmitter, Binance, round, getBaseTicker } from './exchanges/Binan
 import logger from './logger.mjs'
 import { Orders, Trades, Campaigns } from './models/index.mjs'
 
+const MAX_BINANCE_WEIGHT = 1200
+
 const binance = new Binance({
 	apiKey: process.env.BINANCE_API_KEY,
 	apiSecret: process.env.BINANCE_SECRET_KEY
@@ -66,16 +68,53 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 	}
 }
 
+const binanceHasWeightLeft = () => {
+	const usedWeight = binance.usedWeight()
+	const weightLeft = MAX_BINANCE_WEIGHT - usedWeight
+	const timeTillReset = (60 - new Date().getSeconds()) * 1000
+
+	return {
+		timeTillReset,
+		weightLeft
+	}
+}
+
+/**
+ * Get order from binance
+ * 
+ * @param {String} orderId binance order id
+ * @param {String} symbol BTCBUSD
+ * @returns {Object}
+ */
+export const getBinanceOrder = (orderId, symbol) => binance.getOrder({ symbol, orderId })
+
+/**
+ * 
+ * @note
+ * 2 req weight per get status
+ * 1000ms wait time = (60*2) 120 req/min = 10 possible req before rate limit
+ * 2000ms wait time = (30*2) 60 req/min = 20 possible req before rate limit
+ * 
+ * @param {Object} params
+ * @param {Number} retry how many times to retry if failed
+ */
 export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payload = {} }, retry = 1) => {
 	const maxRetries = 10
 	const args = { strategy, orderId, campaignId, payload }
 	const rerun = () => watchOrderTillFill(args)
+	const { weightLeft, timeTillReset } = binanceHasWeightLeft()
+	const waitTime = !weightLeft
+		? timeTillReset
+		: order.side === 'buy'
+			? 1000
+			: 2000
 	
+	if (!weightLeft) {
+		logger.warn(`[Watch Order] binance has no weight left. timeTillReset="${timeTillReset / 1000} sec" orderId="${orderId}"`)
+	}
+		
 	try {
-		const order = await binance.getOrder({
-			symbol: strategy.pair,
-			orderId
-		})
+		const order = await getBinanceOrder(orderId, strategy.pair)
 	
 		if (order.status === 'filled' || order.status === 'cancelled') {
 			await handleOrderUpdate({
@@ -84,7 +123,7 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 				order
 			})
 		} else {
-			setTimeout(rerun, 2500)
+			setTimeout(rerun, waitTime)
 		}
 
 		// if we fulfilled buy order then sell it for takeprofit/stoploss
@@ -95,10 +134,10 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 			await handleStopLoss({ strategy, stopLoss, campaignId })
 		}
 	} catch (e) {
-		logger.error(`[Watch Order] orderId="${orderId}" pair="${strategy.pair}" error="${e.message || e.body || e}" stack="${e.stack}" retry="${retry}"`)
+		logger.error(`[Watch Order] orderId="${orderId}" pair="${strategy.pair}" error="${e.message || e.body || e}" stack="${e.stack}" retry="${retry}" waitTime="${waitTime / 1000} sec"`)
 
 		if (retry < maxRetries) {
-			setTimeout(() => watchOrderTillFill(args, retry + 1), 2500)
+			setTimeout(() => watchOrderTillFill(args, retry + 1), waitTime)
 		}
 	}
 }
@@ -366,10 +405,7 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 	if (status === 'placed') {
 		logger.info(`[Cancel Order] orderId="${orderId}" symbol="${symbol}" camp.name="${name}" `)
 
-		const binanceOrder = await binance.getOrder({
-			symbol: strategy.pair,
-			orderId
-		})
+		const binanceOrder = await getBinanceOrder(orderId, strategy.pair)
 		
 		if (binanceOrder.status === 'placed') {
 			const order = await binance.cancelOrder({
@@ -390,4 +426,3 @@ export const handleCancel = async ({ strategy, campaignId }) => {
 		return activeOrder
 	}
 }
-

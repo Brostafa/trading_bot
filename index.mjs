@@ -5,7 +5,7 @@ import { subDays, startOfDay, addDays, differenceInMilliseconds, formatDistanceS
 import Strategy from './strategies/RsiOverSma.mjs'
 import logger from './logger.mjs'
 import { Events, Campaigns } from './models/index.mjs'
-import { handleSell, handleBuy, handleCancel, watchOrderTillFill, handleStopLoss } from './trader.mjs'
+import { handleSell, handleBuy, handleCancel, watchOrderTillFill, handleStopLoss, getBinanceOrder } from './trader.mjs'
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -106,6 +106,41 @@ const prepStrategy = (strategy, campaign) => {
 	}
 }
 
+const sellActiveOrder = async activeOrder => {
+	const { orderId, side, symbol } = activeOrder
+
+	try {
+		// Make "fake" stratagy to access setOrderStatus
+		const strategy = new Strategy({
+			pair: activeOrder.symbol,
+		})
+
+		logger.info(`[Sell Active Order] Selling active orderId="${orderId}" side="${side}"`)
+
+		const { status } = await getBinanceOrder(orderId, symbol)
+		const shouldCancel = side === 'buy' && status === 'placed'
+		const shouldSell = (side === 'buy' && status === 'filled') || (side === 'sell' && status === 'placed')
+		
+		if (shouldCancel) {
+			await handleCancel({
+				strategy,
+				campaignId
+			})
+
+			logger.info(`[Sell Active Order] Finished CANCELLING active orderId="${orderId}"`)
+		} else if (shouldSell) {
+			await handleSell({
+				strategy,
+				campaignId
+			})
+
+			logger.info(`[Sell Active Order] Finished SELLING active orderId="${orderId}"`)
+		}
+	} catch (e) {
+		logger.error(`[Sell Active Order] Failed to sell active orderId="${orderId}"`, e)
+	}
+}
+
 const handleCampaignEnd = async campaignId => {
 	const {
 		name,
@@ -120,7 +155,6 @@ const handleCampaignEnd = async campaignId => {
 	logger.success(`[Campaign] ended camp.name="${name}" initBalance="${initialBalance}" balance="$${balance}" profitLoss="$${profitLoss} (${profitLossPerc}%)" coinAmount="${coinAmount}${coinSymbol ? ' ' + coinSymbol : ''}"`)
 }
 
-
 const handleCampaign = async campaignId => {
 	const campaign = await Campaigns.findById(campaignId)
 	const {
@@ -129,7 +163,8 @@ const handleCampaign = async campaignId => {
 		profitLoss,
 		profitLossPerc,
 		strategy: campStrat,
-		quoteCurrency
+		quoteCurrency,
+		activeOrder
 	} = campaign
 
 	try {
@@ -193,6 +228,10 @@ const handleCampaign = async campaignId => {
 			
 			logger.warn(`[Bot] No strategy found for campaignId="${campaignId}" camp.name="${name}" reason="${e.reason}" will try again in ${humanizedMs}`)
 			
+			if (activeOrder) {
+				sellActiveOrder(activeOrder)
+			}
+
 			await delay(msTillTomorrow)
 		} else {
 			logger.error(e)

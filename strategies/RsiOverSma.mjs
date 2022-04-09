@@ -174,7 +174,7 @@ export default class Strategy {
 			}
 		}
 
-		if (currentCandle && currentCandle.openTime > this.endTime) {
+		if (currentCandle && Date.now() + 1000 > this.endTime) {
 			this.done = true
 			this.reason = 'End time reached'
 			const { nextAction } = this

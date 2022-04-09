@@ -11,7 +11,6 @@
  * https://binance-docs.github.io/apidocs/spot/en/#9xxx-filter-failures
  * 
  */
-// const Client = require('node-binance-api')
 import Client from 'node-binance-api'
 import EventEmitter from 'events'
 import logger from '../logger.mjs'
@@ -388,7 +387,9 @@ export class Binance {
 
   async _structureOrder (orderRes) {
     const order = normalizeResponse('order', orderRes)
-    const trades = await this.getTrades(order.orderId, order.symbol)
+    const trades = order.status === 'filled'
+      ? await this.getTrades(order.orderId, order.symbol)
+      : []
     const fee = Number(order.fee) || 0
     const roundFee = fee
       ? round(fee)
