@@ -114,9 +114,7 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 	const { weightLeft, timeTillReset } = binanceHasWeightLeft()
 	const waitTime = !weightLeft
 		? timeTillReset
-		: order.side === 'buy'
-			? 1000
-			: 2000
+		: 1500
 	
 	if (!weightLeft) {
 		logger.warn(`[Watch Order] binance has no weight left. timeTillReset="${timeTillReset / 1000} sec" orderId="${orderId}"`)
