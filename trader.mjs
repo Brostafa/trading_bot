@@ -69,22 +69,13 @@ const handleTakeProfit = async ({ strategy, order: oldOrder, takeProfit, campaig
 }
 
 const binanceHasWeightLeft = () => {
-	if (typeof binance.usedWeight === 'function') {
-		const usedWeight = binance.usedWeight()
-		const weightLeft = MAX_BINANCE_WEIGHT - usedWeight
-		const timeTillReset = (60 - new Date().getSeconds()) * 1000
-	
-		return {
-			timeTillReset,
-			weightLeft
-		}
-	} else {
-		logger.warn('[Binance] usedWeight is not a function')
+	const usedWeight = binance.client.usedWeight()
+	const weightLeft = MAX_BINANCE_WEIGHT - Number(usedWeight)
+	const timeTillReset = (60 - new Date().getSeconds()) * 1000
 
-		return {
-			timeTillReset: 0,
-			weightLeft: 1
-		}
+	return {
+		timeTillReset,
+		weightLeft
 	}
 }
 
