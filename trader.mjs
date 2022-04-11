@@ -151,8 +151,6 @@ const createTrade = async ({ campaignId, order }) => {
 		let expectancy = null
 		let expectancyValue = 0
 		let winRate = 0
-
-		console.log('pastTrades', pastTrades)
 		
 		// calculate expectancy
 		if (pastTrades.length) {

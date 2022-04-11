@@ -188,7 +188,7 @@ export default class Strategy {
 
 			if (action) {
 				return {
-					action: 'sell',
+					action,
 					payload: {
 						currentCandle,
 						reason: 'end_of_day'
