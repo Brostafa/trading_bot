@@ -7,7 +7,12 @@ const loggerOptions = {
 		displayDate: true,
 		displayTimestamp: true,
 		displayBadge: false,
-		displayScope: false
+		displayScope: false,
+	},
+	types: {
+		error: {
+			stream: process.stderr
+		}
 	}
 }
 

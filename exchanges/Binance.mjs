@@ -51,6 +51,7 @@ const _symbolFilters = () => {
   getBinancePairs()
   .then(res => {
     pairs = res
+
     logger.info(`[Binance] Loaded symbols ${Object.keys(pairs).length} pairs`)
   }).catch(e => {
     logger.error(`[Binance] Error getting symbol filters ${e}`)
@@ -80,7 +81,9 @@ export const getTickSize = symbol => {
 }
 
 const percision = (price, step) => {
-  const percision = String(parseFloat(step)).split('.')[1].length
+  const percision = String(step).startsWith('1')
+    ? 0
+    : String(parseFloat(step)).split('.')[1].length
   
   return Math.floor(price * Math.pow(10, percision)) / Math.pow(10, percision)
 }

@@ -13,18 +13,20 @@ const binance = new Binance({
 export const handleStopLoss = ({ strategy, stopLoss, campaignId }) => {
 	const symbol = strategy.pair
 
-	logger.info(`[Stop Loss] setup symbol="${symbol}" stopLoss="${stopLoss}"`)
+	logger.info(`[Stop Loss] setup campId="${campaignId}" symbol="${symbol}" stopLoss="${stopLoss}"`)
 	
 	const sellOrder = async ({ price }) => {
 		if (price <= stopLoss) {
-			logger.info(`[Stop Loss] triggered symbol="${symbol}" symbolPrice="${price}" stopLoss="${stopLoss}"`)
+			binanceEmitter.off(symbol, sellOrder)
+
+			logger.info(`[Stop Loss] triggered campId="${campaignId}" symbol="${symbol}" symbolPrice="${price}" stopLoss="${stopLoss}"`)
 			
 			await handleSell({
 				strategy,
 				campaignId
 			})
 
-			binanceEmitter.off(symbol, sellOrder)
+			logger.info(`[Stop Loss] SOLD campId="${campaignId}" symbol="${symbol}" symbolPrice="${price}" stopLoss="${stopLoss}"`)
 		}
 	}
 	
@@ -110,6 +112,11 @@ export const watchOrderTillFill = async ({ strategy, orderId, campaignId, payloa
 	if (!weightLeft) {
 		logger.warn(`[Watch Order] binance has no weight left. timeTillReset="${timeTillReset / 1000} sec" orderId="${orderId}"`)
 	}
+
+	if (!orderId) {
+		logger.error(`[Watch Order] orderId is required`)
+		return
+	}
 		
 	try {
 		const order = await getBinanceOrder(orderId, strategy.pair)
@@ -191,8 +198,12 @@ const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 
 	try {
 		const { total, executedAmount } = order
+
+		if (!total || isNaN(total)) {
+			logger.error(`[Campaign Balance] Order total isn't a valid number total="${total}" order="${JSON.stringify(order)}"`)
+		}
 		
-		if (order.side === 'buy') {
+		if (order.side === 'buy') {			
 			const newBalance = balance - total
 
 			campaignUpdate = {
@@ -223,7 +234,7 @@ const handleCampaignFilledOrder = async ({ campaignId, order }) => {
 				logger.warn(`[Campaign Balance] Paused camp.name="${name}" balance="${newBalance}" because it has funds lower than minBalance="${minBalance}"`)
 			}
 
-			logger.info(`[Campaign Balance] Initial Balance="${initialBalance}" Balance="${newBalance}" Profit Loss="$${profitLoss} (${profitLossPerc} %)"`)
+			logger.info(`[Campaign Balance] Camp Name="${name}" Initial Balance="${initialBalance}" Balance="${newBalance}" Profit Loss="$${profitLoss} (${profitLossPerc} %)"`)
 		}
 		
 		await Campaigns.updateOne({
